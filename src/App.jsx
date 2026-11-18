@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "firebase/auth";
-import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
-import { auth, db, storage, firebaseReady } from "./firebase";
-import { LayoutDashboard, ReceiptText, Wallet, LogOut, Plus, Search, Download, ImagePlus, X, Pencil, Trash2, Menu, ShieldCheck } from "lucide-react";
+import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from "firebase/firestore";
+import { auth, db, firebaseReady } from "./firebase";
+import { LayoutDashboard, ReceiptText, Wallet, LogOut, Plus, Search, Download, X, Pencil, Trash2, Menu, ShieldCheck } from "lucide-react";
 
 const money = n => new Intl.NumberFormat("zh-TW", { style: "currency", currency: "TWD", maximumFractionDigits: 0 }).format(Number(n || 0));
 const today = () => new Date().toISOString().slice(0, 10);
@@ -23,7 +22,6 @@ export default function App() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(blank);
-  const [file, setFile] = useState(null);
   const [search, setSearch] = useState("");
   const [year, setYear] = useState(String(new Date().getFullYear()));
   const [budgetInput, setBudgetInput] = useState("");
@@ -59,23 +57,17 @@ export default function App() {
     finally { setBusy(false); }
   }
 
-  function openNew() { setEditing(null); setForm(blank); setFile(null); setFormOpen(true); }
-  function openEdit(item) { setEditing(item); setForm({ ...blank, ...item }); setFile(null); setFormOpen(true); }
+  function openNew() { setEditing(null); setForm(blank); setFormOpen(true); }
+  function openEdit(item) { setEditing(item); setForm({ ...blank, ...item }); setFormOpen(true); }
 
   async function savePurchase(e) {
     e.preventDefault(); setBusy(true); setError("");
     try {
-      let photoUrl = form.photoUrl || "";
-      if (file) {
-        const path = "purchases/" + (editing?.id || crypto.randomUUID()) + "/" + Date.now() + "-" + file.name;
-        const uploaded = await uploadBytes(ref(storage, path), file);
-        photoUrl = await getDownloadURL(uploaded.ref);
-      }
-      const payload = { ...form, quantity: Number(form.quantity), unitPrice: Number(form.unitPrice), total: Number(form.quantity) * Number(form.unitPrice), photoUrl, updatedAt: serverTimestamp(), createdBy: editing?.createdBy || user.uid };
+      const payload = { ...form, quantity: Number(form.quantity), unitPrice: Number(form.unitPrice), total: Number(form.quantity) * Number(form.unitPrice), updatedAt: serverTimestamp(), createdBy: editing?.createdBy || user.uid };
       if (editing) await updateDoc(doc(db, "purchases", editing.id), payload);
       else await addDoc(collection(db, "purchases"), { ...payload, createdAt: serverTimestamp() });
-      setFormOpen(false); setEditing(null); setForm(blank); setFile(null);
-    } catch (e) { setError("儲存失敗：" + e.message + "。請確認 Firestore、Storage 與使用者角色設定。"); }
+      setFormOpen(false); setEditing(null); setForm(blank);
+    } catch (e) { setError("儲存失敗：" + e.message + "。請確認 Firestore 與使用者角色設定。"); }
     finally { setBusy(false); }
   }
 
@@ -116,11 +108,11 @@ export default function App() {
       {page==="purchases"&&<section className="panel"><div className="panel-heading"><div><h2>採購明細</h2><p>管理用品、憑證、用途與擺放地點</p></div><div className="table-tools"><div className="search"><Search size={16}/><input placeholder="搜尋品項、發票、地點…" value={search} onChange={e=>setSearch(e.target.value)}/></div><button className="secondary" onClick={exportCsv}><Download size={16}/>匯出 CSV</button></div></div><PurchaseTable items={filtered} onEdit={openEdit} onDelete={removeItem} canEdit={canEdit} isAdmin={isAdmin}/></section>}
       {page==="budget"&&<section className="panel budget-panel"><div className="panel-heading"><div><h2>{year} 年度經費</h2><p>預算與執行狀況</p></div></div><div className="budget-number"><span>核定經費</span><strong>{money(budget)}</strong></div><div className="progress"><i style={{width:Math.min(100,budget?total/budget*100:0)+"%"}}/></div><div className="budget-grid"><div><span>已採購支出</span><b>{money(total)}</b></div><div><span>已核銷金額</span><b>{money(reimbursed)}</b></div><div><span>待核銷金額</span><b>{money(pending)}</b></div><div><span>剩餘經費</span><b>{money(Number(budget)-total)}</b></div></div>{isAdmin&&<div className="budget-edit"><label>設定年度核定經費<input type="number" min="0" value={budgetInput} onChange={e=>setBudgetInput(e.target.value)} placeholder="輸入金額"/></label><button className="primary" onClick={saveBudget}>儲存預算</button></div>}</section>}
     </main>
-    {formOpen&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setFormOpen(false)}}><form className="modal" onSubmit={savePurchase}><div className="modal-head"><div><p className="eyebrow">PURCHASE RECORD</p><h2>{editing?"編輯採購紀錄":"新增採購紀錄"}</h2></div><button type="button" className="icon-button" onClick={()=>setFormOpen(false)}><X/></button></div><div className="form-grid">{[["purchaseDate","採購日期","date"],["item","品項名稱","text"],["category","用品分類","select"],["quantity","數量","number"],["unitPrice","單價","number"],["vendor","廠商／平台","text"],["invoiceNo","發票編號","text"],["invoiceDate","發票日期","date"],["purpose","用途說明","text"],["location","擺放／使用地點","text"],["status","核銷狀態","status"],["reimbursementDate","核銷日期","date"]].map(([key,label,type])=><label key={key}>{label}{type==="select"?<select value={form[key]} onChange={e=>setForm({...form,[key]:e.target.value})}>{["文具用品","清潔用品","生活用品","教具教材","活動用品","資訊設備","其他"].map(v=><option key={v}>{v}</option>)}</select>:type==="status"?<select value={form[key]} onChange={e=>setForm({...form,[key]:e.target.value})}><option>待核銷</option><option>已核銷</option></select>:<input required={["purchaseDate","item","quantity","unitPrice"].includes(key)} type={type} min={type==="number"?"0":undefined} step={key==="unitPrice"?"1":undefined} value={form[key]} onChange={e=>setForm({...form,[key]:e.target.value})}/>}</label>)}<label className="wide">備註<textarea rows="2" value={form.note} onChange={e=>setForm({...form,note:e.target.value})}/></label><label className="wide upload"><ImagePlus size={18}/>用品照片／發票憑證（圖片或 PDF，10MB 以內）<input type="file" accept="image/*,application/pdf" onChange={e=>setFile(e.target.files?.[0]||null)}/>{file&&<small>{file.name}</small>}{form.photoUrl&&!file&&<small>已有附件 <a href={form.photoUrl} target="_blank" rel="noreferrer">開啟</a></small>}</label></div><div className="modal-foot"><button type="button" className="secondary" onClick={()=>setFormOpen(false)}>取消</button><button className="primary" disabled={busy}>{busy?"儲存中…":"儲存紀錄"}</button></div></form></div>}
+    {formOpen&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setFormOpen(false)}}><form className="modal" onSubmit={savePurchase}><div className="modal-head"><div><p className="eyebrow">PURCHASE RECORD</p><h2>{editing?"編輯採購紀錄":"新增採購紀錄"}</h2></div><button type="button" className="icon-button" onClick={()=>setFormOpen(false)}><X/></button></div><div className="form-grid">{[["purchaseDate","採購日期","date"],["item","品項名稱","text"],["category","用品分類","select"],["quantity","數量","number"],["unitPrice","單價","number"],["vendor","廠商／平台","text"],["invoiceNo","發票編號","text"],["invoiceDate","發票日期","date"],["purpose","用途說明","text"],["location","擺放／使用地點","text"],["status","核銷狀態","status"],["reimbursementDate","核銷日期","date"]].map(([key,label,type])=><label key={key}>{label}{type==="select"?<select value={form[key]} onChange={e=>setForm({...form,[key]:e.target.value})}>{["文具用品","清潔用品","生活用品","教具教材","活動用品","資訊設備","其他"].map(v=><option key={v}>{v}</option>)}</select>:type==="status"?<select value={form[key]} onChange={e=>setForm({...form,[key]:e.target.value})}><option>待核銷</option><option>已核銷</option></select>:<input required={["purchaseDate","item","quantity","unitPrice"].includes(key)} type={type} min={type==="number"?"0":undefined} step={key==="unitPrice"?"1":undefined} value={form[key]} onChange={e=>setForm({...form,[key]:e.target.value})}/>}</label>)}<label className="wide">備註<textarea rows="2" value={form.note} onChange={e=>setForm({...form,note:e.target.value})}/></label><label className="wide">附件備註（Storage 未啟用，請於紙本憑證留存；可填寫憑證存放位置）<textarea rows="2" value={form.attachmentNote||""} onChange={e=>setForm({...form,attachmentNote:e.target.value})} placeholder="例如：核銷資料夾／115年度／11月份"/></label></div><div className="modal-foot"><button type="button" className="secondary" onClick={()=>setFormOpen(false)}>取消</button><button className="primary" disabled={busy}>{busy?"儲存中…":"儲存紀錄"}</button></div></form></div>}
   </div>;
 }
 
 function PurchaseTable({items,onEdit,onDelete,canEdit,isAdmin}) {
   if (!items.length) return <div className="empty">目前沒有採購紀錄，新增第一筆資料吧。</div>;
-  return <div className="table-wrap"><table><thead><tr><th>採購日期</th><th>品項／用途</th><th>發票編號</th><th>使用地點</th><th>金額</th><th>核銷狀態</th><th>附件</th><th>操作</th></tr></thead><tbody>{items.map(x=><tr key={x.id}><td>{x.purchaseDate||"—"}</td><td><b>{x.item}</b><small>{x.purpose||x.category}</small></td><td>{x.invoiceNo||"—"}</td><td>{x.location||"—"}</td><td className="amount">{money(x.total)}</td><td><span className={"status "+(x.status==="已核銷"?"done":"pending")}>{x.status||"待核銷"}</span></td><td>{x.photoUrl?<a href={x.photoUrl} target="_blank" rel="noreferrer">查看附件</a>:"—"}</td><td><div className="row-actions">{canEdit&&<button title="編輯" onClick={()=>onEdit(x)}><Pencil size={15}/></button>}{isAdmin&&<button title="刪除" onClick={()=>onDelete(x)}><Trash2 size={15}/></button>}</div></td></tr>)}</tbody></table></div>;
+  return <div className="table-wrap"><table><thead><tr><th>採購日期</th><th>品項／用途</th><th>發票編號</th><th>使用地點</th><th>金額</th><th>核銷狀態</th><th>憑證存放位置</th><th>操作</th></tr></thead><tbody>{items.map(x=><tr key={x.id}><td>{x.purchaseDate||"—"}</td><td><b>{x.item}</b><small>{x.purpose||x.category}</small></td><td>{x.invoiceNo||"—"}</td><td>{x.location||"—"}</td><td className="amount">{money(x.total)}</td><td><span className={"status "+(x.status==="已核銷"?"done":"pending")}>{x.status||"待核銷"}</span></td><td>{x.attachmentNote||"—"}</td><td><div className="row-actions">{canEdit&&<button title="編輯" onClick={()=>onEdit(x)}><Pencil size={15}/></button>}{isAdmin&&<button title="刪除" onClick={()=>onDelete(x)}><Trash2 size={15}/></button>}</div></td></tr>)}</tbody></table></div>;
 }
