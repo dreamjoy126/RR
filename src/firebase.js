@@ -4,7 +4,7 @@ import { getFirestore } from "firebase/firestore";
 
 // Firebase Web App 設定（前端公開設定；資料安全由 Authentication 與 Firestore Rules 控制）
 const firebaseConfig = {
-  apiKey: "AIzaSyDotVuZozZquLBs53G35vV9Shc2g4GyH2Io",
+  apiKey: "AIzaSyDotVuZoZquLBs53G35vV9Shc2g4GyH2Io",
   authDomain: "rrrr-29923.firebaseapp.com",
   projectId: "rrrr-29923",
   messagingSenderId: "33128052034",
