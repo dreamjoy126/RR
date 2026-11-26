@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "firebase/auth";
-import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, updateDoc } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, updateDoc, setDoc } from "firebase/firestore";
 import { auth, db, firebaseReady } from "./firebase";
 import { LayoutDashboard, ReceiptText, Wallet, LogOut, Plus, Search, Download, X, Pencil, Trash2, ShieldCheck, ImagePlus, Upload, ClipboardPaste, FileDown } from "lucide-react";
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, ImageRun } from "docx";
@@ -57,6 +57,8 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [year, setYear] = useState(String(new Date().getFullYear()));
   const [budgetInput, setBudgetInput] = useState("");
+  const [buyerDraft, setBuyerDraft] = useState("");
+  const [locationDraft, setLocationDraft] = useState("");
   const fileInput = useRef([]);
 
   useEffect(() => {
@@ -80,6 +82,9 @@ export default function App() {
   const reimbursed = 0;
   const pending = total;
   const budget = budgets.find(x => String(x.year) === year)?.amount || 0;
+  const optionDoc = budgets.find(x => x.id === "system-options");
+  const buyerOptions = optionDoc?.buyerOptions || [];
+  const locationOptions = optionDoc?.locationOptions || [];
 
   async function handleAuth(e) {
     e.preventDefault(); setError(""); setBusy(true);
@@ -202,7 +207,8 @@ export default function App() {
     e.preventDefault(); setBusy(true); setError("");
     try {
       const validLines = form.lineItems.map(v=>({...v,item:v.item.trim(),purpose:v.purpose.trim(),location:v.location.trim()}));
-      if (!validLines.length || validLines.some(v=>!v.item || !v.purpose || !v.location)) throw new Error("請完整填寫每個品項的名稱、用途及擺放地點。");
+      if (!form.buyer) throw new Error("請選擇採購人。");
+      if (!validLines.length || validLines.some(v=>!v.item || !v.purpose || !v.location)) throw new Error("請完整填寫每個品項的名稱、用途及選擇擺放地點。");
       if (JSON.stringify(validLines).length > 850000) throw new Error("同一張發票的照片總容量過大，請減少照片或先縮小圖片後再儲存。");
       const payload = { buyer: form.buyer, invoiceDate: form.invoiceDate, invoiceAmount: Number(form.invoiceAmount || 0), invoiceNo: form.invoiceNo, lineItems: validLines, item: validLines[0].item, purpose: validLines[0].purpose, location: validLines[0].location, photo: validLines[0].photo || "", updatedAt: serverTimestamp(), createdBy: editing?.createdBy || user.uid };
       if (editing) await updateDoc(doc(db, "purchases", editing.id), payload);
@@ -215,6 +221,17 @@ export default function App() {
   async function removeItem(item) {
     if (!isAdmin || !confirm("確定刪除此筆採購紀錄？")) return;
     try { await deleteDoc(doc(db, "purchases", item.id)); } catch (e) { setError(e.message); }
+  }
+
+  function openSettings() { setBuyerDraft(buyerOptions.join("\\n")); setLocationDraft(locationOptions.join("\\n")); setPage("settings"); }
+
+  async function saveOptions() {
+    if (!isAdmin) return;
+    const clean = value => [...new Set(value.split(/\\r?\\n/).map(v=>v.trim()).filter(Boolean))];
+    try {
+      await setDoc(doc(db, "budgets", "system-options"), { year: "system-options", buyerOptions: clean(buyerDraft), locationOptions: clean(locationDraft), updatedAt: serverTimestamp() });
+      setError("");
+    } catch (e) { setError("儲存選單設定失敗：" + e.message); }
   }
 
   async function saveBudget() {
@@ -240,17 +257,17 @@ export default function App() {
   if (!user) return <div className="login-wrap"><form className="login-card" onSubmit={handleAuth}><div className="brand-mark">RR</div><p className="eyebrow">RESOURCE ROOM</p><h1>資源教室雜支管理系統</h1><p className="muted">採購紀錄管理</p><label>電子郵件<input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@example.com"/></label><label>密碼<input type="password" required minLength="6" value={password} onChange={e=>setPassword(e.target.value)} placeholder="至少 6 個字元"/></label><button className="primary full" disabled={busy}>{busy ? "處理中…" : authMode === "login" ? "登入系統" : "建立帳號"}</button><button type="button" className="link-button" onClick={()=>setAuthMode(authMode==="login"?"register":"login")}>{authMode==="login"?"尚未有帳號？建立帳號":"已有帳號？返回登入"}</button>{error&&<p className="error">{error}</p>}</form></div>;
 
   return <div className="app-shell">
-    <aside className="sidebar"><div className="brand"><div className="brand-mark small">RR</div><div><b>資源教室</b><span>雜支管理系統</span></div></div><nav><button className={page==="dashboard"?"active":""} onClick={()=>setPage("dashboard")}><LayoutDashboard size={18}/>總覽儀表板</button><button className={page==="purchases"?"active":""} onClick={()=>setPage("purchases")}><ReceiptText size={18}/>採購紀錄</button><button className={page==="budget"?"active":""} onClick={()=>setPage("budget")}><Wallet size={18}/>年度經費</button></nav><div className="side-bottom"><div className="role-chip"><ShieldCheck size={15}/>{role==="admin"?"管理者":role==="staff"?"承辦人":"查詢者"}</div><div className="user-email">{user.email}</div><button className="logout" onClick={()=>signOut(auth)}><LogOut size={17}/>登出</button></div></aside>
-    <main className="main"><header className="topbar"><div><p className="eyebrow">RESOURCE ROOM / EXPENSES</p><h1>{page==="dashboard"?"總覽儀表板":page==="purchases"?"採購紀錄":"年度經費管理"}</h1></div><div className="top-actions"><select value={year} onChange={e=>setYear(e.target.value)}>{Array.from({length:6},(_,i)=>String(new Date().getFullYear()-i)).map(y=><option key={y}>{y}</option>)}</select>{canEdit&&<button className="primary" onClick={openNew}><Plus size={17}/>新增採購</button>}</div></header>
+    <aside className="sidebar"><div className="brand"><div className="brand-mark small">RR</div><div><b>資源教室</b><span>雜支管理系統</span></div></div><nav><button className={page==="dashboard"?"active":""} onClick={()=>setPage("dashboard")}><LayoutDashboard size={18}/>總覽儀表板</button><button className={page==="purchases"?"active":""} onClick={()=>setPage("purchases")}><ReceiptText size={18}/>採購紀錄</button><button className={page==="budget"?"active":""} onClick={()=>setPage("budget")}><Wallet size={18}/>年度經費</button>{isAdmin&&<button className={page==="settings"?"active":""} onClick={openSettings}><Pencil size={18}/>選單設定</button>}</nav><div className="side-bottom"><div className="role-chip"><ShieldCheck size={15}/>{role==="admin"?"管理者":role==="staff"?"承辦人":"查詢者"}</div><div className="user-email">{user.email}</div><button className="logout" onClick={()=>signOut(auth)}><LogOut size={17}/>登出</button></div></aside>
+    <main className="main"><header className="topbar"><div><p className="eyebrow">RESOURCE ROOM / EXPENSES</p><h1>{page==="dashboard"?"總覽儀表板":page==="purchases"?"採購紀錄":page==="settings"?"選單設定":"年度經費管理"}</h1></div><div className="top-actions"><select value={year} onChange={e=>setYear(e.target.value)}>{Array.from({length:6},(_,i)=>String(new Date().getFullYear()-i)).map(y=><option key={y}>{y}</option>)}</select>{canEdit&&<button className="primary" onClick={openNew}><Plus size={17}/>新增採購</button>}</div></header>
       {error&&<div className="alert">{error}<button onClick={()=>setError("")}><X size={16}/></button></div>}
       {profile && !profile.role && <div className="alert">尚未設定使用者角色，目前以查詢者權限登入。請管理者在 Firestore 的 users/{user.uid} 文件設定 role。</div>}
       {page==="dashboard"&&<><section className="stats"><div className="stat-card"><span>年度發票金額</span><strong>{money(total)}</strong><small>{year} 年已登錄採購紀錄</small></div><div className="stat-card"><span>採購筆數</span><strong>{filtered.length} 筆</strong><small>依發票日期統計</small></div><div className="stat-card"><span>本年度剩餘經費</span><strong>{money(Number(budget)-total)}</strong><small>核定經費扣除登錄金額</small></div><div className="stat-card"><span>年度核定經費</span><strong>{money(budget)}</strong><small>由年度經費頁面設定</small></div></section><section className="panel"><div className="panel-heading"><div><h2>近期採購紀錄</h2><p>依發票日期排序</p></div><button className="text-button" onClick={()=>setPage("purchases")}>查看全部 →</button></div><PurchaseTable items={filtered.slice(0,5)} onEdit={openEdit} onDelete={removeItem} onWord={downloadWord} canEdit={canEdit} isAdmin={isAdmin}/></section></>}
       {page==="purchases"&&<section className="panel"><div className="panel-heading"><div><h2>採購紀錄明細</h2><p>依表格欄位登錄用品、照片、用途及擺放地點</p></div><div className="table-tools"><div className="search"><Search size={16}/><input placeholder="搜尋用品、發票、地點…" value={search} onChange={e=>setSearch(e.target.value)}/></div><button className="secondary" onClick={exportCsv}><Download size={16}/>匯出 CSV</button></div></div><PurchaseTable items={filtered} onEdit={openEdit} onDelete={removeItem} onWord={downloadWord} canEdit={canEdit} isAdmin={isAdmin}/></section>}
-      {page==="budget"&&<section className="panel budget-panel"><div className="panel-heading"><div><h2>{year} 年度經費</h2><p>依採購紀錄中的發票金額統計</p></div></div><div className="budget-number"><span>核定經費</span><strong>{money(budget)}</strong></div><div className="progress"><i style={{width:Math.min(100,budget?total/budget*100:0)+"%"}}/></div><div className="budget-grid"><div><span>採購發票金額</span><b>{money(total)}</b></div><div><span>採購筆數</span><b>{filtered.length} 筆</b></div><div><span>剩餘經費</span><b>{money(Number(budget)-total)}</b></div></div>{isAdmin&&<div className="budget-edit"><label>設定年度核定經費<input type="number" min="0" value={budgetInput} onChange={e=>setBudgetInput(e.target.value)} placeholder="輸入金額"/></label><button className="primary" onClick={saveBudget}>儲存預算</button></div>}</section>}
+      {page==="settings"&&isAdmin&&<section className="panel settings-panel"><div className="panel-heading"><div><h2>採購紀錄選單設定</h2><p>請將每個選項分行輸入，儲存後會套用於新增及編輯紀錄。</p></div></div><div className="settings-grid"><label>採購人名單<textarea rows="8" value={buyerDraft} onChange={e=>setBuyerDraft(e.target.value)} placeholder={"例如：\\n王小明\\n陳小華"}/><small>每行一位採購人</small></label><label>存放／使用地點名單<textarea rows="8" value={locationDraft} onChange={e=>setLocationDraft(e.target.value)} placeholder={"例如：\\n資源教室辦公室\\n資源教室諮商室\\n活動器材室"}/><small>每行一個地點</small></label></div><div className="settings-actions"><button className="primary" onClick={saveOptions}>儲存選單設定</button></div></section>}{page==="budget"&&<section className="panel budget-panel"><div className="panel-heading"><div><h2>{year} 年度經費</h2><p>依採購紀錄中的發票金額統計</p></div></div><div className="budget-number"><span>核定經費</span><strong>{money(budget)}</strong></div><div className="progress"><i style={{width:Math.min(100,budget?total/budget*100:0)+"%"}}/></div><div className="budget-grid"><div><span>採購發票金額</span><b>{money(total)}</b></div><div><span>採購筆數</span><b>{filtered.length} 筆</b></div><div><span>剩餘經費</span><b>{money(Number(budget)-total)}</b></div></div>{isAdmin&&<div className="budget-edit"><label>設定年度核定經費<input type="number" min="0" value={budgetInput} onChange={e=>setBudgetInput(e.target.value)} placeholder="輸入金額"/></label><button className="primary" onClick={saveBudget}>儲存預算</button></div>}</section>}
     </main>
     {formOpen&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setFormOpen(false)}}><form className="modal purchase-modal" onSubmit={savePurchase}><div className="modal-head"><div><p className="eyebrow">PURCHASE RECORD</p><h2>{editing?"編輯採購紀錄":"新增採購紀錄"}</h2></div><button type="button" className="icon-button" onClick={()=>setFormOpen(false)}><X/></button></div>
       <div className="form-grid purchase-fields">
-        <label>採購人<input required value={form.buyer} onChange={e=>setForm({...form,buyer:e.target.value})} placeholder="請輸入採購人"/></label>
+        <label>採購人<select required value={form.buyer} onChange={e=>setForm({...form,buyer:e.target.value})}><option value="">請選擇採購人</option>{[...new Set([...buyerOptions,form.buyer].filter(Boolean))].map(v=><option key={v} value={v}>{v}</option>)}</select></label>
         <label>發票日期<input required type="date" value={form.invoiceDate} onChange={e=>setForm({...form,invoiceDate:e.target.value})}/></label>
         <label>發票金額<input required type="number" min="0" value={form.invoiceAmount} onChange={e=>setForm({...form,invoiceAmount:e.target.value})} placeholder="請輸入金額"/></label>
         <label>發票號碼<input value={form.invoiceNo} onChange={e=>setForm({...form,invoiceNo:e.target.value})} placeholder="請輸入發票號碼"/></label>
@@ -264,7 +281,7 @@ export default function App() {
             <input ref={el=>{if(!fileInput.current)fileInput.current=[];fileInput.current[index]=el;}} type="file" accept="image/*" hidden onChange={e=>{if(e.target.files?.[0])receivePhoto(e.target.files[0],index);}}/>
           </div>
           <label className="wide">用途說明<textarea required rows="3" value={line.purpose} onChange={e=>updateLine(index,"purpose",e.target.value)} placeholder="請說明此品項用途"/></label>
-          <label className="wide">擺放（使用）地點<input required value={line.location} onChange={e=>updateLine(index,"location",e.target.value)} placeholder="請輸入用品擺放或使用地點"/></label>
+          <label className="wide">擺放（使用）地點<select required value={line.location} onChange={e=>updateLine(index,"location",e.target.value)}><option value="">請選擇存放／使用地點</option>{[...new Set([...locationOptions,line.location].filter(Boolean))].map(v=><option key={v} value={v}>{v}</option>)}</select></label>
         </section>)}
       </div>
       <p className="photo-note">每個品項可分別上傳照片；照片會自動壓縮後儲存於採購紀錄中，本系統不使用 Firebase Storage；若品項較多，請留意整張發票照片總容量。</p>
