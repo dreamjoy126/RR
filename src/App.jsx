@@ -243,7 +243,7 @@ export default function App() {
   async function addYear() {
     if (!isAdmin) return;
     const value = yearDraft.trim();
-    if (!/^\\d{4}$/.test(value) || Number(value) < 2000 || Number(value) > 2100) { setError("請輸入 2000 至 2100 之間的四位數年度。"); return; }
+    if (!/^\d{4}$/.test(value) || Number(value) < 2000 || Number(value) > 2100) { setError("請輸入 2000 至 2100 之間的四位數年度。"); return; }
     if (yearOptions.includes(value)) { setYear(value); setYearDraft(""); setError(""); return; }
     try {
       await setDoc(doc(db, "budgets", "system-options"), { year: "system-options", buyerOptions, locationOptions, yearOptions: [...yearOptions, value], updatedAt: serverTimestamp() }, { merge: true });
