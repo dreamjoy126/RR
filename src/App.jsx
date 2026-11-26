@@ -32,11 +32,11 @@ async function preparePhoto(file) {
   canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
   let quality = 0.78;
   let result = canvas.toDataURL("image/jpeg", quality);
-  while (result.length > 650000 && quality > 0.35) {
+  while (result.length > 180000 && quality > 0.25) {
     quality -= 0.08;
     result = canvas.toDataURL("image/jpeg", quality);
   }
-  if (result.length > 700000) throw new Error("圖片仍太大，請改用較小的圖片或先裁切後再上傳。");
+  if (result.length > 190000) throw new Error("圖片仍太大，請改用較小的圖片或先裁切後再上傳。");
   return result;
 }
 
@@ -142,6 +142,7 @@ export default function App() {
     try {
       const validLines = form.lineItems.map(v=>({...v,item:v.item.trim(),purpose:v.purpose.trim(),location:v.location.trim()}));
       if (!validLines.length || validLines.some(v=>!v.item || !v.purpose || !v.location)) throw new Error("請完整填寫每個品項的名稱、用途及擺放地點。");
+      if (JSON.stringify(validLines).length > 850000) throw new Error("同一張發票的照片總容量過大，請減少照片或先縮小圖片後再儲存。");
       const payload = { buyer: form.buyer, invoiceDate: form.invoiceDate, invoiceAmount: Number(form.invoiceAmount || 0), invoiceNo: form.invoiceNo, lineItems: validLines, item: validLines[0].item, purpose: validLines[0].purpose, location: validLines[0].location, photo: validLines[0].photo || "", updatedAt: serverTimestamp(), createdBy: editing?.createdBy || user.uid };
       if (editing) await updateDoc(doc(db, "purchases", editing.id), payload);
       else await addDoc(collection(db, "purchases"), { ...payload, createdAt: serverTimestamp() });
@@ -205,7 +206,7 @@ export default function App() {
           <label className="wide">擺放（使用）地點<input required value={line.location} onChange={e=>updateLine(index,"location",e.target.value)} placeholder="請輸入用品擺放或使用地點"/></label>
         </section>)}
       </div>
-      <p className="photo-note">每個品項可分別上傳照片；照片會縮小後儲存於採購紀錄中，本系統不使用 Firebase Storage。</p>
+      <p className="photo-note">每個品項可分別上傳照片；照片會自動壓縮後儲存於採購紀錄中，本系統不使用 Firebase Storage；若品項較多，請留意整張發票照片總容量。</p>
       <div className="modal-foot"><button type="button" className="secondary" onClick={()=>setFormOpen(false)}>取消</button><button className="primary" disabled={busy}>{busy?"儲存中…":"儲存紀錄"}</button></div>
     </form></div>}
   </div>;
