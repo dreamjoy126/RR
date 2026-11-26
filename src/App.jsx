@@ -3,7 +3,7 @@ import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndP
 import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, updateDoc } from "firebase/firestore";
 import { auth, db, firebaseReady } from "./firebase";
 import { LayoutDashboard, ReceiptText, Wallet, LogOut, Plus, Search, Download, X, Pencil, Trash2, ShieldCheck, ImagePlus, Upload, ClipboardPaste, FileDown } from "lucide-react";
-import { Document, Packer, Paragraph, Table, TableRow, TableCell, WidthType, ImageRun, HeadingLevel } from "docx";
+import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, ImageRun } from "docx";
 
 const money = n => new Intl.NumberFormat("zh-TW", { style: "currency", currency: "TWD", maximumFractionDigits: 0 }).format(Number(n || 0));
 const today = () => new Date().toISOString().slice(0, 10);
