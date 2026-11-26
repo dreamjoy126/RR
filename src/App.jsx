@@ -223,7 +223,7 @@ export default function App() {
     try { await deleteDoc(doc(db, "purchases", item.id)); } catch (e) { setError(e.message); }
   }
 
-  function openSettings() { setBuyerDraft(buyerOptions.join("\\n")); setLocationDraft(locationOptions.join("\\n")); setPage("settings"); }
+  function openSettings() { setBuyerDraft(buyerOptions.join("\n")); setLocationDraft(locationOptions.join("\n")); setPage("settings"); }
 
   async function saveOptions() {
     if (!isAdmin) return;
