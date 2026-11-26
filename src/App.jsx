@@ -60,6 +60,7 @@ export default function App() {
   const [budgetInput, setBudgetInput] = useState("");
   const [budgetType, setBudgetType] = useState("補助款");
   const [yearDraft, setYearDraft] = useState("");
+  const [yearEdit, setYearEdit] = useState(null);
   const [buyerDraft, setBuyerDraft] = useState("");
   const [locationDraft, setLocationDraft] = useState("");
   const fileInput = useRef([]);
@@ -264,19 +265,39 @@ export default function App() {
     } catch (e) { setError("新增年度失敗：" + e.message); }
   }
 
-  async function renameYear(oldValue) {
+  function startEditYear(oldValue) {
     if (!isAdmin) return;
-    const nextValue = prompt("請輸入新的年度（四位數）：", oldValue);
-    if (nextValue === null) return;
-    const value = nextValue.trim();
+    const records = budgets.filter(x => String(x.year) === String(oldValue) && x.id !== "system-options");
+    const subsidy = records.find(x => (x.fundType || "補助款") === "補助款");
+    const matching = records.find(x => x.fundType === "配合款");
+    setYearEdit({
+      oldYear: String(oldValue),
+      year: String(oldValue),
+      subsidy: subsidy ? String(subsidy.amount ?? 0) : "0",
+      matching: matching ? String(matching.amount ?? 0) : "0"
+    });
+    setError("");
+  }
+
+  async function saveYearEdit() {
+    if (!isAdmin || !yearEdit) return;
+    const value = yearEdit.year.trim();
     if (!/^\\d{4}$/.test(value) || Number(value) < 2000 || Number(value) > 2100) { setError("請輸入 2000 至 2100 之間的四位數年度。"); return; }
-    if (value !== oldValue && yearOptions.includes(value)) { setError("此年度已存在，請勿重複新增。"); return; }
+    if (value !== yearEdit.oldYear && yearOptions.includes(value)) { setError("此年度已存在，請勿重複新增。"); return; }
+    if ([yearEdit.subsidy, yearEdit.matching].some(v => v.trim() === "" || !Number.isFinite(Number(v)) || Number(v) < 0)) { setError("補助款及配合款請輸入有效的非負數字。"); return; }
     try {
-      const nextOptions = yearOptions.map(y => y === oldValue ? value : y);
+      const nextOptions = [...new Set(yearOptions.map(y => y === yearEdit.oldYear ? value : y))];
       await setDoc(doc(db, "budgets", "system-options"), { year: "system-options", buyerOptions, locationOptions, yearOptions: nextOptions, updatedAt: serverTimestamp() }, { merge: true });
-      if (year === oldValue) setYear(value);
+      for (const fundType of ["補助款", "配合款"]) {
+        const existing = budgets.find(x => String(x.year) === yearEdit.oldYear && (x.fundType || "補助款") === fundType && x.id !== "system-options");
+        const amount = Number(fundType === "補助款" ? yearEdit.subsidy : yearEdit.matching);
+        if (existing) await updateDoc(doc(db, "budgets", existing.id), { year: Number(value), amount, fundType });
+        else await addDoc(collection(db, "budgets"), { year: Number(value), amount, fundType });
+      }
+      if (year === yearEdit.oldYear) setYear(value);
+      setYearEdit(null);
       setError("");
-    } catch (e) { setError("編輯年度失敗：" + e.message); }
+    } catch (e) { setError("儲存年度及核定經費失敗：" + e.message); }
   }
 
   async function deleteYear(value) {
@@ -311,7 +332,7 @@ export default function App() {
       {profile && !profile.role && <div className="alert">尚未設定使用者角色，目前以查詢者權限登入。請管理者在 Firestore 的 users/{user.uid} 文件設定 role。</div>}
       {page==="dashboard"&&<><section className="stats"><div className="stat-card"><span>年度發票金額</span><strong>{money(total)}</strong><small>{year} 年已登錄採購紀錄</small></div><div className="stat-card"><span>採購筆數</span><strong>{filtered.length} 筆</strong><small>依發票日期統計</small></div><div className="stat-card"><span>本年度剩餘經費</span><strong>{money(Number(budget)-total)}</strong><small>核定經費扣除登錄金額</small></div><div className="stat-card"><span>年度核定經費</span><strong>{money(budget)}</strong><small>由年度經費頁面設定</small></div></section><section className="panel"><div className="panel-heading"><div><h2>近期採購紀錄</h2><p>依發票日期排序</p></div><button className="text-button" onClick={()=>setPage("purchases")}>查看全部 →</button></div><PurchaseTable items={filtered.slice(0,5)} onEdit={openEdit} onDelete={removeItem} onWord={downloadWord} canEdit={canEdit} isAdmin={isAdmin}/></section></>}
       {page==="purchases"&&<section className="panel"><div className="panel-heading"><div><h2>採購紀錄明細</h2><p>依表格欄位登錄用品、照片、用途及擺放地點</p></div><div className="table-tools"><div className="search"><Search size={16}/><input placeholder="搜尋用品、發票、地點…" value={search} onChange={e=>setSearch(e.target.value)}/></div><button className="secondary" onClick={downloadSelectedWord} disabled={!selectedIds.some(id=>filtered.some(x=>x.id===id))}><FileDown size={16}/>合併下載 Word（{selectedIds.filter(id=>filtered.some(x=>x.id===id)).length}）</button></div></div><PurchaseTable items={filtered} onEdit={openEdit} onDelete={removeItem} onWord={downloadWord} canEdit={canEdit} isAdmin={isAdmin} selectedIds={selectedIds} onToggleSelected={toggleSelected} allSelected={filtered.length>0&&filtered.every(x=>selectedIds.includes(x.id))} onToggleAll={toggleAllSelected} selectionEnabled/></section>}
-      {page==="settings"&&isAdmin&&<section className="panel settings-panel"><div className="panel-heading"><div><h2>採購紀錄選單設定</h2><p>請將每個選項分行輸入，儲存後會套用於新增及編輯紀錄。</p></div></div><div className="settings-grid"><label>採購人名單<textarea rows="8" value={buyerDraft} onChange={e=>setBuyerDraft(e.target.value)} placeholder={"例如：\n王小明\n陳小華"}/><small>每行一位採購人</small></label><label>存放／使用地點名單<textarea rows="8" value={locationDraft} onChange={e=>setLocationDraft(e.target.value)} placeholder={"例如：\n資源教室辦公室\n資源教室諮商室\n活動器材室"}/><small>每行一個地點</small></label></div><div className="settings-actions"><button className="primary" onClick={saveOptions}>儲存選單設定</button></div></section>}{page==="budget"&&<section className="panel budget-panel"><div className="panel-heading"><div><h2>{year} 年度經費</h2><p>依採購紀錄中的發票金額統計</p></div>{isAdmin&&<div className="table-tools"><input type="number" min="2000" max="2100" value={yearDraft} onChange={e=>setYearDraft(e.target.value)} placeholder="新增年度，例如 2031"/><button className="secondary" onClick={addYear}>新增年度</button></div>}</div><div className="year-manage"><h3>年度選單管理</h3><p>所有年度皆可編輯或移除。移除年度只會從年度選單中移除，不會刪除既有採購紀錄或經費資料。</p><div className="year-list">{yearOptions.map(y=><div className="year-item" key={y}><b>{y} 年</b><div className="row-actions"><button type="button" title="編輯年度" onClick={()=>renameYear(y)}><Pencil size={15}/></button><button type="button" title="刪除年度" onClick={()=>deleteYear(y)}><Trash2 size={15}/></button></div></div>)}</div></div><div className="budget-number"><span>核定經費</span><strong>{money(budget)}</strong></div><div className="progress"><i style={{width:Math.min(100,budget?total/budget*100:0)+"%"}}/></div><div className="budget-grid"><div><span>採購發票金額</span><b>{money(total)}</b></div><div><span>採購筆數</span><b>{filtered.length} 筆</b></div><div><span>剩餘經費</span><b>{money(Number(budget)-total)}</b></div></div>{yearBudgets.length>0&&<div className="budget-grid">{yearBudgets.map(x=><div key={x.id}><span>{x.fundType||"補助款"}</span><b>{money(x.amount||0)}</b></div>)}</div>}{isAdmin&&<div className="budget-edit"><label>經費類別<select value={budgetType} onChange={e=>setBudgetType(e.target.value)}><option value="補助款">補助款</option><option value="配合款">配合款</option></select></label><label>設定年度核定經費<input type="number" min="0" value={budgetInput} onChange={e=>setBudgetInput(e.target.value)} placeholder={selectedBudget?String(selectedBudget.amount||0):"輸入金額"}/></label><button className="primary" onClick={saveBudget}>儲存預算</button></div>}</section>}
+      {page==="settings"&&isAdmin&&<section className="panel settings-panel"><div className="panel-heading"><div><h2>採購紀錄選單設定</h2><p>請將每個選項分行輸入，儲存後會套用於新增及編輯紀錄。</p></div></div><div className="settings-grid"><label>採購人名單<textarea rows="8" value={buyerDraft} onChange={e=>setBuyerDraft(e.target.value)} placeholder={"例如：\n王小明\n陳小華"}/><small>每行一位採購人</small></label><label>存放／使用地點名單<textarea rows="8" value={locationDraft} onChange={e=>setLocationDraft(e.target.value)} placeholder={"例如：\n資源教室辦公室\n資源教室諮商室\n活動器材室"}/><small>每行一個地點</small></label></div><div className="settings-actions"><button className="primary" onClick={saveOptions}>儲存選單設定</button></div></section>}{page==="budget"&&<section className="panel budget-panel"><div className="panel-heading"><div><h2>{year} 年度經費</h2><p>依採購紀錄中的發票金額統計</p></div>{isAdmin&&<div className="table-tools"><input type="number" min="2000" max="2100" value={yearDraft} onChange={e=>setYearDraft(e.target.value)} placeholder="新增年度，例如 2031"/><button className="secondary" onClick={addYear}>新增年度</button></div>}</div><div className="year-manage"><h3>年度選單管理</h3><p>所有年度皆可編輯或移除。移除年度只會從年度選單中移除，不會刪除既有採購紀錄或經費資料。</p><div className="year-list">{yearOptions.map(y=><div className={yearEdit?.oldYear===y?"year-item editing":"year-item"} key={y}><div className="year-item-head"><b>{y} 年</b><div className="row-actions"><button type="button" title="編輯年度及核定經費" onClick={()=>startEditYear(y)}><Pencil size={15}/></button><button type="button" title="刪除年度" onClick={()=>deleteYear(y)}><Trash2 size={15}/></button></div></div>{yearEdit?.oldYear===y&&<div className="year-edit-grid"><label>年度<input type="number" min="2000" max="2100" value={yearEdit.year} onChange={e=>setYearEdit(v=>({...v,year:e.target.value}))}/></label><label>補助款核定經費<input type="number" min="0" value={yearEdit.subsidy} onChange={e=>setYearEdit(v=>({...v,subsidy:e.target.value}))}/></label><label>配合款核定經費<input type="number" min="0" value={yearEdit.matching} onChange={e=>setYearEdit(v=>({...v,matching:e.target.value}))}/></label><div className="year-edit-actions"><button type="button" className="primary" onClick={saveYearEdit}>儲存年度及經費</button><button type="button" className="secondary" onClick={()=>setYearEdit(null)}>取消</button></div></div>}</div>)}</div></div><div className="budget-number"><span>核定經費</span><strong>{money(budget)}</strong></div><div className="progress"><i style={{width:Math.min(100,budget?total/budget*100:0)+"%"}}/></div><div className="budget-grid"><div><span>採購發票金額</span><b>{money(total)}</b></div><div><span>採購筆數</span><b>{filtered.length} 筆</b></div><div><span>剩餘經費</span><b>{money(Number(budget)-total)}</b></div></div>{yearBudgets.length>0&&<div className="budget-grid">{yearBudgets.map(x=><div key={x.id}><span>{x.fundType||"補助款"}</span><b>{money(x.amount||0)}</b></div>)}</div>}</section>}
     </main>
     {formOpen&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setFormOpen(false)}}><form className="modal purchase-modal" onSubmit={savePurchase}><div className="modal-head"><div><p className="eyebrow">PURCHASE RECORD</p><h2>{editing?"編輯採購紀錄":"新增採購紀錄"}</h2></div><button type="button" className="icon-button" onClick={()=>setFormOpen(false)}><X/></button></div>
       <div className="form-grid purchase-fields">
