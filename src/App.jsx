@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "firebase/auth";
-import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, updateDoc } from "firebase/firestore";
 import { auth, db, firebaseReady } from "./firebase";
 import { LayoutDashboard, ReceiptText, Wallet, LogOut, Plus, Search, Download, X, Pencil, Trash2, ShieldCheck, ImagePlus, Upload, ClipboardPaste } from "lucide-react";
 
@@ -64,7 +64,7 @@ export default function App() {
   useEffect(() => {
     if (!user || !db) { setProfile(null); setItems([]); return; }
     const stopProfile = onSnapshot(doc(db, "users", user.uid), snap => setProfile(snap.exists() ? snap.data() : { role: "viewer" }), e => setError(e.message));
-    const stopItems = onSnapshot(query(collection(db, "purchases"), orderBy("invoiceDate", "desc")), snap => setItems(snap.docs.map(d => ({ id: d.id, ...d.data() }))), e => setError("讀取採購資料失敗，請確認 Firestore 已建立及安全規則已部署。"));
+    const stopItems = onSnapshot(collection(db, "purchases"), snap => setItems(snap.docs.map(d => ({ id: d.id, ...d.data() }))), e => setError("讀取採購資料失敗，請確認 Firestore 已建立及安全規則已部署。"));
     const stopBudgets = onSnapshot(collection(db, "budgets"), snap => setBudgets(snap.docs.map(d => ({ id: d.id, ...d.data() }))), e => setError(e.message));
     return () => { stopProfile(); stopItems(); stopBudgets(); };
   }, [user]);
@@ -72,7 +72,7 @@ export default function App() {
   const role = profile?.role || "viewer";
   const canEdit = role === "admin" || role === "staff";
   const isAdmin = role === "admin";
-  const filtered = useMemo(() => items.filter(x => String(x.invoiceDate || "").startsWith(year) && [x.buyer,x.item,x.invoiceNo,x.purpose,x.location].join(" ").toLowerCase().includes(search.toLowerCase())), [items, year, search]);
+  const filtered = useMemo(() => items.filter(x => String(x.invoiceDate || x.purchaseDate || "").startsWith(year) && [x.buyer,x.item,x.invoiceNo,x.purpose,x.location].join(" ").toLowerCase().includes(search.toLowerCase())).sort((a,b) => String(b.invoiceDate || b.purchaseDate || "").localeCompare(String(a.invoiceDate || a.purchaseDate || ""))), [items, year, search]);
   const total = filtered.reduce((s,x) => s + Number(x.invoiceAmount || 0), 0);
   const reimbursed = 0;
   const pending = total;
