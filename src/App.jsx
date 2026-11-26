@@ -282,7 +282,7 @@ export default function App() {
   async function saveYearEdit() {
     if (!isAdmin || !yearEdit) return;
     const value = yearEdit.year.trim();
-    if (!/^\\d{4}$/.test(value) || Number(value) < 2000 || Number(value) > 2100) { setError("請輸入 2000 至 2100 之間的四位數年度。"); return; }
+    if (!/^\d{4}$/.test(value) || Number(value) < 2000 || Number(value) > 2100) { setError("請輸入 2000 至 2100 之間的四位數年度。"); return; }
     if (value !== yearEdit.oldYear && yearOptions.includes(value)) { setError("此年度已存在，請勿重複新增。"); return; }
     if ([yearEdit.subsidy, yearEdit.matching].some(v => v.trim() === "" || !Number.isFinite(Number(v)) || Number(v) < 0)) { setError("補助款及配合款請輸入有效的非負數字。"); return; }
     try {
