@@ -36,3 +36,11 @@
 .settings-actions{display:flex;justify-content:flex-end;margin-top:18px}
 .modal select{width:100%;border:1px solid #d8e1eb;border-radius:8px;padding:11px 12px;background:#fff;color:#263548;font:inherit}
 @media(max-width:700px){.settings-grid{grid-template-columns:1fr}}
+
+
+.year-manage{margin:22px 0;padding:18px;border:1px solid var(--border,#e5e7eb);border-radius:14px;background:#fbfcfe}
+.year-manage h3{margin:0 0 6px;font-size:16px}
+.year-manage p{margin:0 0 14px;color:#687386;font-size:13px}
+.year-list{display:flex;flex-wrap:wrap;gap:10px}
+.year-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid #dce3eb;border-radius:10px;background:#fff}
+.year-item small{color:#7b8794}
