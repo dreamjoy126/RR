@@ -92,6 +92,19 @@ export default function App() {
   const locationOptions = optionDoc?.locationOptions || [];
   const yearOptions = [...new Set((Array.isArray(optionDoc?.yearOptions) ? optionDoc.yearOptions : ["2026","2027"]).map(String))].sort((a,b)=>Number(b)-Number(a));
 
+  useEffect(() => {
+    if (!isAdmin || !optionDoc || optionDoc.yearOptionsRestored === true) return;
+    const restoredYears = [...new Set(["2026", "2027", ...(Array.isArray(optionDoc.yearOptions) ? optionDoc.yearOptions : [])].map(String))];
+    setDoc(doc(db, "budgets", "system-options"), {
+      year: "system-options",
+      buyerOptions: optionDoc.buyerOptions || [],
+      locationOptions: optionDoc.locationOptions || [],
+      yearOptions: restoredYears,
+      yearOptionsRestored: true,
+      updatedAt: serverTimestamp()
+    }, { merge: true }).catch(e => setError("復原年度選單失敗：" + e.message));
+  }, [isAdmin, optionDoc?.id, optionDoc?.yearOptionsRestored]);
+
   async function handleAuth(e) {
     e.preventDefault(); setError(""); setBusy(true);
     try {
