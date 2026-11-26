@@ -90,7 +90,7 @@ export default function App() {
   const optionDoc = budgets.find(x => x.id === "system-options");
   const buyerOptions = optionDoc?.buyerOptions || [];
   const locationOptions = optionDoc?.locationOptions || [];
-  const yearOptions = [...new Set(["2026","2027","2028","2029","2030", ...(optionDoc?.yearOptions || []).map(String), ...budgets.filter(x => x.id !== "system-options").map(x => String(x.year))])].sort((a,b)=>Number(b)-Number(a));
+  const yearOptions = [...new Set(["2026","2027", ...(optionDoc?.yearOptions || []).map(String)])].sort((a,b)=>Number(b)-Number(a));
 
   async function handleAuth(e) {
     e.preventDefault(); setError(""); setBusy(true);
