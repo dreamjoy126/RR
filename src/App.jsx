@@ -58,6 +58,7 @@ export default function App() {
   const [selectedIds, setSelectedIds] = useState([]);
   const [year, setYear] = useState(String(new Date().getFullYear()));
   const [budgetInput, setBudgetInput] = useState("");
+  const [budgetType, setBudgetType] = useState("補助款");
   const [buyerDraft, setBuyerDraft] = useState("");
   const [locationDraft, setLocationDraft] = useState("");
   const fileInput = useRef([]);
@@ -82,7 +83,9 @@ export default function App() {
   const total = filtered.reduce((s,x) => s + Number(x.invoiceAmount || 0), 0);
   const reimbursed = 0;
   const pending = total;
-  const budget = budgets.find(x => String(x.year) === year)?.amount || 0;
+  const yearBudgets = budgets.filter(x => String(x.year) === year && x.id !== "system-options");
+  const budget = yearBudgets.reduce((sum, x) => sum + Number(x.amount || 0), 0);
+  const selectedBudget = yearBudgets.find(x => (x.fundType || "補助款") === budgetType);
   const optionDoc = budgets.find(x => x.id === "system-options");
   const buyerOptions = optionDoc?.buyerOptions || [];
   const locationOptions = optionDoc?.locationOptions || [];
@@ -236,11 +239,11 @@ export default function App() {
   }
 
   async function saveBudget() {
-    if (!isAdmin || !budgetInput || Number(budgetInput) < 0) return;
+    if (!isAdmin || budgetInput === "" || Number(budgetInput) < 0) return;
     try {
-      const found = budgets.find(x => String(x.year) === year);
-      if (found) await updateDoc(doc(db, "budgets", found.id), { amount: Number(budgetInput) });
-      else await addDoc(collection(db, "budgets"), { year: Number(year), amount: Number(budgetInput) });
+      const found = yearBudgets.find(x => (x.fundType || "補助款") === budgetType);
+      if (found) await updateDoc(doc(db, "budgets", found.id), { amount: Number(budgetInput), fundType: budgetType });
+      else await addDoc(collection(db, "budgets"), { year: Number(year), amount: Number(budgetInput), fundType: budgetType });
       setBudgetInput("");
     } catch (e) { setError("更新年度預算失敗：" + e.message); }
   }
@@ -256,7 +259,7 @@ export default function App() {
       {profile && !profile.role && <div className="alert">尚未設定使用者角色，目前以查詢者權限登入。請管理者在 Firestore 的 users/{user.uid} 文件設定 role。</div>}
       {page==="dashboard"&&<><section className="stats"><div className="stat-card"><span>年度發票金額</span><strong>{money(total)}</strong><small>{year} 年已登錄採購紀錄</small></div><div className="stat-card"><span>採購筆數</span><strong>{filtered.length} 筆</strong><small>依發票日期統計</small></div><div className="stat-card"><span>本年度剩餘經費</span><strong>{money(Number(budget)-total)}</strong><small>核定經費扣除登錄金額</small></div><div className="stat-card"><span>年度核定經費</span><strong>{money(budget)}</strong><small>由年度經費頁面設定</small></div></section><section className="panel"><div className="panel-heading"><div><h2>近期採購紀錄</h2><p>依發票日期排序</p></div><button className="text-button" onClick={()=>setPage("purchases")}>查看全部 →</button></div><PurchaseTable items={filtered.slice(0,5)} onEdit={openEdit} onDelete={removeItem} onWord={downloadWord} canEdit={canEdit} isAdmin={isAdmin}/></section></>}
       {page==="purchases"&&<section className="panel"><div className="panel-heading"><div><h2>採購紀錄明細</h2><p>依表格欄位登錄用品、照片、用途及擺放地點</p></div><div className="table-tools"><div className="search"><Search size={16}/><input placeholder="搜尋用品、發票、地點…" value={search} onChange={e=>setSearch(e.target.value)}/></div><button className="secondary" onClick={downloadSelectedWord} disabled={!selectedIds.some(id=>filtered.some(x=>x.id===id))}><FileDown size={16}/>合併下載 Word（{selectedIds.filter(id=>filtered.some(x=>x.id===id)).length}）</button></div></div><PurchaseTable items={filtered} onEdit={openEdit} onDelete={removeItem} onWord={downloadWord} canEdit={canEdit} isAdmin={isAdmin} selectedIds={selectedIds} onToggleSelected={toggleSelected} allSelected={filtered.length>0&&filtered.every(x=>selectedIds.includes(x.id))} onToggleAll={toggleAllSelected} selectionEnabled/></section>}
-      {page==="settings"&&isAdmin&&<section className="panel settings-panel"><div className="panel-heading"><div><h2>採購紀錄選單設定</h2><p>請將每個選項分行輸入，儲存後會套用於新增及編輯紀錄。</p></div></div><div className="settings-grid"><label>採購人名單<textarea rows="8" value={buyerDraft} onChange={e=>setBuyerDraft(e.target.value)} placeholder={"例如：\n王小明\n陳小華"}/><small>每行一位採購人</small></label><label>存放／使用地點名單<textarea rows="8" value={locationDraft} onChange={e=>setLocationDraft(e.target.value)} placeholder={"例如：\n資源教室辦公室\n資源教室諮商室\n活動器材室"}/><small>每行一個地點</small></label></div><div className="settings-actions"><button className="primary" onClick={saveOptions}>儲存選單設定</button></div></section>}{page==="budget"&&<section className="panel budget-panel"><div className="panel-heading"><div><h2>{year} 年度經費</h2><p>依採購紀錄中的發票金額統計</p></div></div><div className="budget-number"><span>核定經費</span><strong>{money(budget)}</strong></div><div className="progress"><i style={{width:Math.min(100,budget?total/budget*100:0)+"%"}}/></div><div className="budget-grid"><div><span>採購發票金額</span><b>{money(total)}</b></div><div><span>採購筆數</span><b>{filtered.length} 筆</b></div><div><span>剩餘經費</span><b>{money(Number(budget)-total)}</b></div></div>{isAdmin&&<div className="budget-edit"><label>設定年度核定經費<input type="number" min="0" value={budgetInput} onChange={e=>setBudgetInput(e.target.value)} placeholder="輸入金額"/></label><button className="primary" onClick={saveBudget}>儲存預算</button></div>}</section>}
+      {page==="settings"&&isAdmin&&<section className="panel settings-panel"><div className="panel-heading"><div><h2>採購紀錄選單設定</h2><p>請將每個選項分行輸入，儲存後會套用於新增及編輯紀錄。</p></div></div><div className="settings-grid"><label>採購人名單<textarea rows="8" value={buyerDraft} onChange={e=>setBuyerDraft(e.target.value)} placeholder={"例如：\n王小明\n陳小華"}/><small>每行一位採購人</small></label><label>存放／使用地點名單<textarea rows="8" value={locationDraft} onChange={e=>setLocationDraft(e.target.value)} placeholder={"例如：\n資源教室辦公室\n資源教室諮商室\n活動器材室"}/><small>每行一個地點</small></label></div><div className="settings-actions"><button className="primary" onClick={saveOptions}>儲存選單設定</button></div></section>}{page==="budget"&&<section className="panel budget-panel"><div className="panel-heading"><div><h2>{year} 年度經費</h2><p>依採購紀錄中的發票金額統計</p></div></div><div className="budget-number"><span>核定經費</span><strong>{money(budget)}</strong></div><div className="progress"><i style={{width:Math.min(100,budget?total/budget*100:0)+"%"}}/></div><div className="budget-grid"><div><span>採購發票金額</span><b>{money(total)}</b></div><div><span>採購筆數</span><b>{filtered.length} 筆</b></div><div><span>剩餘經費</span><b>{money(Number(budget)-total)}</b></div></div>{yearBudgets.length>0&&<div className="budget-grid">{yearBudgets.map(x=><div key={x.id}><span>{x.fundType||"補助款"}</span><b>{money(x.amount||0)}</b></div>)}</div>}{isAdmin&&<div className="budget-edit"><label>經費類別<select value={budgetType} onChange={e=>setBudgetType(e.target.value)}><option value="補助款">補助款</option><option value="配合款">配合款</option></select></label><label>設定年度核定經費<input type="number" min="0" value={budgetInput} onChange={e=>setBudgetInput(e.target.value)} placeholder={selectedBudget?String(selectedBudget.amount||0):"輸入金額"}/></label><button className="primary" onClick={saveBudget}>儲存預算</button></div>}</section>}
     </main>
     {formOpen&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setFormOpen(false)}}><form className="modal purchase-modal" onSubmit={savePurchase}><div className="modal-head"><div><p className="eyebrow">PURCHASE RECORD</p><h2>{editing?"編輯採購紀錄":"新增採購紀錄"}</h2></div><button type="button" className="icon-button" onClick={()=>setFormOpen(false)}><X/></button></div>
       <div className="form-grid purchase-fields">
