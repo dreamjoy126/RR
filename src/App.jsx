@@ -114,26 +114,87 @@ export default function App() {
   async function downloadWord(record) {
     try {
       const lines = getLines(record);
-      const cell = (value) => new TableCell({ children: [new Paragraph({ text: String(value || "—"), font: "Microsoft JhengHei" })], verticalAlign: "center" });
-      const rows = [new TableRow({ children: ["項次","用品名稱／規格","用品照片","用途說明","擺放（使用）地點"].map(cell) })];
-      lines.forEach((line,i)=>{
-        let photoContent = [new Paragraph({ text: "—" })];
-        if (line.photo && line.photo.startsWith("data:image/")) {
-          const bytes = Uint8Array.from(atob(line.photo.split(",")[1]), ch=>ch.charCodeAt(0));
-          photoContent = [new Paragraph({ children: [new ImageRun({ data: bytes, transformation: { width: 100, height: 75 } })] })];
-        }
-        rows.push(new TableRow({ children: [cell(i+1),cell(line.item),new TableCell({children:photoContent}),cell(line.purpose),cell(line.location)] }));
+      const border = { style: "single", size: 6, color: "7F8C99" };
+      const borders = { top: border, bottom: border, left: border, right: border, insideHorizontal: border, insideVertical: border };
+      const font = "標楷體";
+      const metaWidths = [1656, 2952, 1656, 2952];
+      const detailWidths = [691, 1944, 2088, 2232, 2261];
+      const makeCell = (value, options = {}) => new TableCell({
+        width: { size: options.width || 1800, type: WidthType.DXA },
+        verticalAlign: "center",
+        shading: options.fill ? { fill: options.fill, type: "clear" } : undefined,
+        margins: options.margins || { top: 120, bottom: 120, left: 70, right: 70 },
+        children: [new Paragraph({
+          alignment: options.align || "center",
+          spacing: { before: 40, after: 40 },
+          children: [new TextRun({
+            text: String(value ?? ""),
+            font,
+            size: options.size || 18,
+            bold: !!options.bold,
+            color: options.color || "000000"
+          })]
+        })]
       });
-      const docxFile = new Document({ sections: [{ children: [
-        new Paragraph({ text: "資源教室雜支採購紀錄", heading: HeadingLevel.TITLE, alignment: "center" }),
-        new Paragraph({ text: `採購人：${record.buyer || "—"}　　發票日期：${record.invoiceDate || "—"}`, font: "Microsoft JhengHei" }),
-        new Paragraph({ text: `發票金額：${money(record.invoiceAmount)}　　發票號碼：${record.invoiceNo || "—"}`, font: "Microsoft JhengHei" }),
-        new Paragraph({ text: "" }),
-        new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows })
-      ] }] });
+      const metaRows = [
+        new TableRow({ children: [
+          makeCell("採購人", { width: metaWidths[0], fill: "D9EAF7", bold: true, size: 20 }),
+          makeCell(record.buyer || "", { width: metaWidths[1], align: "left", size: 20 }),
+          makeCell("發票日期", { width: metaWidths[2], fill: "D9EAF7", bold: true, size: 20 }),
+          makeCell(record.invoiceDate || "", { width: metaWidths[3], align: "left", size: 20 })
+        ] }),
+        new TableRow({ children: [
+          makeCell("發票金額", { width: metaWidths[0], fill: "D9EAF7", bold: true, size: 20 }),
+          makeCell(money(record.invoiceAmount), { width: metaWidths[1], align: "left", size: 20 }),
+          makeCell("發票號碼", { width: metaWidths[2], fill: "D9EAF7", bold: true, size: 20 }),
+          makeCell(record.invoiceNo || "", { width: metaWidths[3], align: "left", size: 20 })
+        ] })
+      ];
+      const headers = ["項次", "用品名稱／規格", "用品照片", "用途說明", "擺放（使用）地點"];
+      const detailRows = [new TableRow({ tableHeader: true, children: headers.map((v, i) => makeCell(v, { width: detailWidths[i], fill: "1F4E79", bold: true, color: "FFFFFF", size: 18, margins: { top: 130, bottom: 130, left: 55, right: 55 } })) })];
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        let photoParagraph = new Paragraph({ text: "" });
+        if (line.photo && line.photo.startsWith("data:image/")) {
+          const bytes = Uint8Array.from(atob(line.photo.split(",")[1]), ch => ch.charCodeAt(0));
+          photoParagraph = new Paragraph({ alignment: "center", children: [new ImageRun({ data: bytes, transformation: { width: 95, height: 72 } })] });
+        }
+        const photoCell = new TableCell({
+          width: { size: detailWidths[2], type: WidthType.DXA },
+          verticalAlign: "center",
+          margins: { top: 120, bottom: 120, left: 70, right: 70 },
+          children: [photoParagraph]
+        });
+        detailRows.push(new TableRow({ height: { value: 2088, rule: "atLeast" }, children: [
+          makeCell(i + 1, { width: detailWidths[0], size: 18 }),
+          makeCell(line.item || "", { width: detailWidths[1], size: 18 }),
+          photoCell,
+          makeCell(line.purpose || "", { width: detailWidths[3], size: 18 }),
+          makeCell(line.location || "", { width: detailWidths[4], size: 18 })
+        ] }));
+      }
+      const docxFile = new Document({
+        sections: [{
+          properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 792, bottom: 792, left: 792, right: 792 } } },
+          children: [
+            new Paragraph({
+              alignment: "center",
+              spacing: { before: 0, after: 240 },
+              children: [new TextRun({ text: "雜支用品採購及核銷紀錄表", font, size: 36, bold: true, color: "1F4E79" })]
+            }),
+            new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, columnWidths: metaWidths, borders, rows: metaRows }),
+            new Paragraph({ text: "", spacing: { after: 40 } }),
+            new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, columnWidths: detailWidths, borders, rows: detailRows }),
+            new Paragraph({
+              spacing: { before: 160, after: 40 },
+              children: [new TextRun({ text: "核銷檢附資料：請依規定檢附發票或收據，並填寫用品用途及實際擺放（使用）地點。", font, size: 18, color: "595959" })]
+            })
+          ]
+        }]
+      });
       const blob = await Packer.toBlob(docxFile);
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a"); a.href = url; a.download = `採購紀錄_${record.invoiceNo || record.invoiceDate || "未命名"}.docx`; a.click(); URL.revokeObjectURL(url);
+      const a = document.createElement("a"); a.href = url; a.download = `雜支用品採購及核銷紀錄表_${record.invoiceNo || record.invoiceDate || "未命名"}.docx`; a.click(); URL.revokeObjectURL(url);
     } catch (e) { setError("Word 檔案產生失敗：" + e.message); }
   }
 
