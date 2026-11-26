@@ -161,7 +161,7 @@ export default function App() {
         <label>發票號碼<input value={form.invoiceNo} onChange={e=>setForm({...form,invoiceNo:e.target.value})} placeholder="請輸入發票號碼"/></label>
         <label className="wide">用品名稱／規格<input required value={form.item} onChange={e=>setForm({...form,item:e.target.value})} placeholder="請輸入用品名稱及規格"/></label>
         <label className="wide">用品照片</label>
-        <div className="photo-upload wide" tabIndex="0" onPaste={handlePaste} onClick={()=>fileInput.current?.click()} onKeyDown={e=>{if(e.key==="Enter"||e.key===" ")fileInput.current?.click();}}>
+        <div className="photo-upload wide" tabIndex="0" onPaste={handlePaste} onKeyDown={e=>{if(e.key==="Enter"||e.key===" ")fileInput.current?.click();}}>
           {form.photo?<img className="photo-preview" src={form.photo} alt="用品照片預覽"/>:<div className="photo-placeholder"><ImagePlus size={30}/><b>點擊選取照片，或在此按 Ctrl+V 貼上</b><span>可貼上螢幕截圖或複製的圖片</span></div>}
           <div className="photo-actions"><button type="button" className="secondary" onClick={e=>{e.stopPropagation();fileInput.current?.click();}}><Upload size={16}/>選取檔案上傳</button><span><ClipboardPaste size={15}/> Ctrl+V 貼上圖片</span>{form.photo&&<button type="button" className="text-button" onClick={e=>{e.stopPropagation();setForm({...form,photo:""});}}>移除照片</button>}</div>
           <input ref={fileInput} type="file" accept="image/*" hidden onChange={e=>{if(e.target.files?.[0])receivePhoto(e.target.files[0]);}}/>
