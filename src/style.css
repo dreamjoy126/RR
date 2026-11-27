@@ -53,3 +53,10 @@
 .year-edit-grid input{display:block;width:100%;margin-top:7px;border:1px solid #dfe8e2;border-radius:8px;padding:10px 11px;background:#fff;color:#34483e}
 .year-edit-actions{grid-column:1/-1;display:flex;justify-content:flex-end;gap:8px}
 @media(max-width:700px){.year-edit-grid{grid-template-columns:1fr}.year-edit-actions{grid-column:auto;justify-content:flex-start}}
+
+.account-permissions{margin-top:32px;padding-top:24px;border-top:1px solid #edf1ee}
+.account-permissions .panel-heading{margin-bottom:14px}
+.account-permissions table select{min-width:110px;padding:8px 10px;border:1px solid #dfe8e2;border-radius:8px;background:#fff;color:#34483e}
+.account-permissions td small{max-width:260px;overflow-wrap:anywhere;white-space:normal}
+.permission-note{font-size:12px;line-height:1.7;color:#84938b;margin:14px 0 0}
+@media(max-width:700px){.account-permissions .table-wrap{overflow-x:auto}}
